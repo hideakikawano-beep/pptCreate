@@ -5,120 +5,120 @@
     {
       "type": "title",
       "title": "Notta × SHIRAKU API連携\nディスカッションペーパー",
-      "content": "Archi-Record連携に向けた技術要件確認\n2026年3月"
+      "content": "Archi-Record連携に向けた技術要件確認\n2026年3月\n\n※本資料はNotta API v0.4仕様書をベースに整合性確認済み"
     },
     {
       "type": "content",
-      "slide_title": "実現したい連携フロー",
-      "key_message": "議事録動画 → Notta（AI処理）→ JSON自動送信 → Archi-Recordチェックリストに自動入力",
+      "slide_title": "実現したい連携フロー（理想）",
+      "key_message": "議事録動画 → Notta（AI処理）→ Archi-Record自動入力。ただしSTEP1〜3はAPI v1の制約あり（後述）",
       "body_items": [
         {
           "heading": "STEP 1｜動画の取り込み",
-          "body": "【Pattern A】Zoom MeetingにNotta Botを招待\n　→ Zoom参加者名を話者名に自動変換・高精度識別\n【Pattern B】録画済み MP4/MP3 をアップロード\n　→ 話者1・話者2として識別（後で名前を編集）"
+          "body": "【Pattern A】Zoom MeetingにNotta Botを招待\n　→ Zoom参加者名を話者名に自動変換・高精度識別\n　⚠️ Bot派遣APIはv1後半〜v2で検討中（v1では未提供）\n\n【Pattern B】録画済み MP4/MP3 をアップロード\n　→ 話者1・話者2として識別（後で名前を編集）\n　⚠️ ファイルアップロードAPIもv1後半〜v2で検討中\n\n【v1で確実に使えるもの】\n　Nottaアプリ（Web/モバイル）で録音・アップロード済みのノートに\n　APIでアクセスしてデータ取得する形が v1 の現実的な経路"
         },
         {
-          "heading": "STEP 2｜Nottaで議事録を自動生成",
-          "body": "① 音声解析・文字起こし\n② 話者識別（スピーカー分離）\n③ 質疑応答をQ&Aペアとして構造化\n④ タイムスタンプを各発言に付与"
+          "heading": "STEP 2｜NottaのAPI出力データ",
+          "body": "✅ 音声解析・文字起こし（セグメント単位）\n✅ 話者識別（speaker id/name）\n✅ タイムスタンプ（start/end を秒単位floatで付与）\n✅ AI要約（テキスト形式）\n\n⚠️ 「質疑応答をQ&Aペアとして構造化」する機能は\n　 API v0.4仕様に記載なし → Notta内部で要確認\n\n⚠️ スクリーンショット取得・CDNアップロード機能も\n　 API v0.4仕様に記載なし → Notta内部で要確認"
         },
         {
-          "heading": "STEP 3｜JSON形式でArchi-Recordへ自動送信",
-          "body": "1レコード＝Q&Aペア1組\n　• 質問内容 / 質問者\n　• 回答 / 回答者\n　• スクリーンショット（候補3-5枚）\n　• タイムスタンプ\n議事録確定 → Webhook POSTで自動配信"
+          "heading": "STEP 3｜Archi-Recordへのデータ連携",
+          "body": "【Webhookの役割】\n　文字起こし/要約の完了を通知（note_id + metadata を含む）\n　→ フルデータ（transcript全文）は含まれない\n\n【pull型フロー（API仕様に整合）】\n　① NottaがWebhook（transcript.completed）を送信\n　② Archi-RecordがWebhookを受信\n　③ Archi-RecordがNotta APIを呼び出し\n　   GET /v1/notes/{id}/transcript でデータ取得\n　④ Archi-Record側でデータを整形・登録\n\n→ 「NottaがArchi-Recordに全データをPOST」\n　 ではなく「Archi-RecordがNottaからpull取得」が現実的な設計"
         },
         {
-          "heading": "STEP 4｜チェックリストへ自動入力",
-          "body": "Archi-RecordのCheck Listに\n各Q&Aペアが1行ずつ自動追加：\n　□ 質問内容 ／ 質問者\n　□ 回答内容 ／ 回答者\n　📷 スクリーンショット（添付）\n→ 手動転記ゼロ・ミス防止"
+          "heading": "STEP 4｜チェックリストへの自動入力",
+          "body": "Archi-RecordのCheck Listに\n各発言・Q&Aが1行ずつ自動追加：\n　□ 質問内容 ／ 質問者\n　□ 回答内容 ／ 回答者\n\n※Q&A構造化がNotta側で提供されない場合：\n　Archi-Record側でtranscriptセグメントを\n　LLM等で処理してQ&Aペアに変換する実装が必要\n\n→ どちら側で処理するか方針確定が先決事項"
         }
       ]
     },
     {
       "type": "content",
-      "slide_title": "送受信するJSONデータの仕様",
-      "key_message": "1レコード＝Q&Aペア1組。5フィールド＋タイムスタンプで構成。スクリーンショットは基本1枚",
+      "slide_title": "Notta API v1 スコープ整理",
+      "key_message": "v1で確実に使えるものとv1後半〜v2検討中のものを明確に区別して開発計画を立てる",
       "body_items": [
         {
-          "heading": "JSONフィールド構成（1レコード）",
-          "body": "{\n  \"question\"     : \"質問の内容テキスト\",\n  \"questioner\"   : \"質問者の名前\",\n  \"answer\"       : \"回答の内容テキスト\",\n  \"answerer\"     : \"回答者の名前\",\n  \"screenshots\"  : [\"url1\", \"url2\", ...],\n  \"timestamp\"    : \"00:12:34\"\n}"
+          "heading": "✅ v1で提供される機能",
+          "body": "• ノート一覧・詳細取得（フィルタ・ページネーション）\n• 文字起こし取得（セグメント：話者/タイムスタンプ/テキスト）\n• AI要約取得\n• メタデータ読み書き（外部システムIDとの紐づけ）\n• Webhook通知\n  - transcript.completed / transcript.failed\n  - summary.completed / summary.failed\n• APIキー認証（ワークスペース単位で発行）"
         },
         {
-          "heading": "スクリーンショットの取得方針",
-          "body": "【取得タイミング】\n　質問者の発話開始タイムスタンプ起点\n　→ 10秒ごとに1枚ずつキャプチャ\n【枚数】基本1枚でOK（3-5枚候補から選択）\n【動画ファイル】処理後は保存不要\n　→ ストレージ節約・プライバシー配慮"
+          "heading": "⚠️ v1後半〜v2で検討中（現時点で未提供）",
+          "body": "• Bot派遣API（Zoom等への自動参加）\n• ファイルアップロードAPI（MP4/MP3等）\n• 音声ファイルダウンロード\n• ワークスペース管理（メンバー追加/削除）\n• APIキーのアクセス範囲細分化\n  （ユーザー/グループ/フォルダ単位）\n\n⚠️ v0.4で未確定の事項\n• プライベートノートへのアクセス権限モデル\n• Q&A構造化エンジン\n• スクリーンショット取得・CDN機能"
         },
         {
-          "heading": "Pattern A vs B　話者識別精度比較",
-          "body": "【Pattern A】Notta Bot（Zoom参加）\n　◎ Zoom表示名 → 話者名を自動変換\n　◎ 高精度な話者識別\n　→ 推奨シナリオ\n\n【Pattern B】MP4/MP3 アップロード\n　△ 「話者1・話者2」で識別\n　→ 名前の後付け編集が必要"
+          "heading": "PoCで現実的に使えるv1の経路",
+          "body": "Nottaアプリで録音済み（またはアップロード済み）のノートに対して：\n\n① Webアプリ / モバイルで録音・ファイルアップロード\n② 文字起こし・要約が完了したらWebhookで通知\n③ Archi-RecordがNotta APIでtranscriptをpull取得\n④ Archi-Record側でデータ整形 → チェックリスト自動入力\n\n→ STEP1の自動化（Botやファイルアップロードの完全自動化）は\n　 v2以降。PoCではNotta手動操作 + API取得の構成が現実的"
         },
         {
-          "heading": "NottaのUIでの連携イメージ",
-          "body": "「連携とアプリ」→「すべての連携サービス」\n　→ Archi-Recordが一覧に追加される\n　（Slack・Salesforceと同列のUI）\n\nオートメーション設定で：\n　アクション → 「Archi-Recordに送信」\n　オプション → 「プロジェクトを選択」"
+          "heading": "メタデータによるノート↔プロジェクトの紐づけ",
+          "body": "API仕様の中核機能：メタデータ（key-value）\n\n【仕組み】\n　Nottaのノートに archi_record_project_id を付与：\n　PATCH /v1/notes/{id}/metadata\n　{ \"archi_record_project_id\": \"proj-xxx\" }\n\n【効果】\n　Webhookペイロードにmetadataが含まれるため\n　Archi-Recordは受信時点で「どのプロジェクトに\n　紐づけるか」を即座に特定できる\n\n→ UIでプロジェクト選択 → Notta側にmetadataを書き込む\n　 という設計がAPI仕様に最も整合する"
         }
       ]
     },
     {
       "type": "content",
-      "slide_title": "Notta API開発で考慮すべき4テーマ",
-      "key_message": "「OAuth設計」「Q&A抽出」「スクリーンショット取得」「Webhook配信」がNotta側の主要開発項目",
+      "slide_title": "Nottaが取得できるデータ仕様（v1実態）",
+      "key_message": "NottaはQ&A構造化済みJSONではなく生セグメントデータを返す。Q&A変換はArchi-Record側 or Notta追加実装で対応",
       "body_items": [
         {
-          "heading": "① OAuth認証フロー設計",
-          "body": "Archi-RecordはGoogle SSO採用\n→ Slack型OAuthとの差分設計が必要\n\n検討アプローチ：\n　A) Archi-RecordがNotta向けに\n　   OAuth 2.0クライアントを発行\n　B) Google IDトークンを転送して連携\n※どちらが実現可能かをSHIRAKUと確認"
+          "heading": "Notta APIが実際に返すデータ（transcript）",
+          "body": "GET /v1/notes/{id}/transcript のレスポンス：\n{\n  \"note_id\": \"550e8400-...\",\n  \"language\": \"ja\",\n  \"segments\": [\n    {\n      \"id\": \"seg-001\",\n      \"speaker\": { \"id\": \"spk-001\", \"name\": \"田中太郎\" },\n      \"start\": 0.0,\n      \"end\": 5.2,\n      \"text\": \"それでは本日のミーティングを始めます。\"\n    }\n  ],\n  \"has_more\": true,\n  \"next_cursor\": \"...\"\n}"
         },
         {
-          "heading": "② Q&A構造化エンジン",
-          "body": "発話テキストから「質問」「回答」を自動抽出\n\n【LLMアプローチ】高精度・コスト高\n　→ 文脈を理解して判定\n【ルールベース】高速・低コスト\n　→ 疑問符・助詞・話者交替で判定\n\n建築専門用語への対応も検討が必要"
+          "heading": "理想のJSON（Q&Aペア）との差分",
+          "body": "【理想（PPT v1時点の記載）】\n{\n  \"question\"   : \"○○の仕様はどうなりますか？\",\n  \"questioner\" : \"田中太郎\",\n  \"answer\"     : \"○○については△△の方針で...\",\n  \"answerer\"   : \"鈴木一郎\",\n  \"screenshots\": [\"https://cdn.notta.ai/...\"],\n  \"timestamp\"  : \"00:12:34\"\n}\n\n⚠️ 差分：\n  • Q/A構造化 → Notta API v1に存在しない\n  • screenshots → Notta API v1に存在しない\n  • 上記2点はいずれかの側での追加実装が必要"
         },
         {
-          "heading": "③ スクリーンショット取得",
-          "body": "【取得フロー】\n　① Zoom録画 or MP4ファイル取得\n　② タイムスタンプ指定でフレーム抽出\n　   （ffmpeg等で処理）\n　③ Notta CDNにアップロード → URL生成\n　④ 動画ファイルを処理後に削除\n\n映り込みの法的対応も確認が必要"
+          "heading": "Webhookペイロード（実際の仕様）",
+          "body": "transcript.completed 時のWebhookペイロード：\n{\n  \"event\": \"transcript.completed\",\n  \"timestamp\": \"2026-03-17T10:05:00Z\",\n  \"delivery_id\": \"dlv_7f3a1b2c...\",\n  \"data\": {\n    \"note_id\": \"550e8400-...\",\n    \"title\": \"〇〇社 現場確認会議\",\n    \"source\": \"zoom\",\n    \"duration\": 1800,\n    \"metadata\": {\n      \"archi_record_project_id\": \"proj-xxx\"\n    }\n  }\n}\n→ フルtranscriptは含まれない（通知のみ）\n　 Archi-Record側で別途APIコールが必要"
         },
         {
-          "heading": "④ Webhook / JSON配信設計",
-          "body": "【送信タイミング】議事録確定時に自動POST\n\n設計上の考慮点：\n　• 冪等性（二重送信防止）\n　• リトライ（最大3回・指数バックオフ）\n　• 送信ログの保持\n\nスクリーンショットの送信形式：\n　URLリンク or Base64？→ SHIRAKU確認要"
+          "heading": "Webhook仕様（正確な値）",
+          "body": "【署名】HMAC-SHA256（X-Notta-Signatureヘッダー）\n【重複排除】X-Notta-Delivery-Id で冪等性担保\n【リプレイ対策】X-Notta-Timestamp（5分以内のみ受理）\n\n【リトライポリシー（API仕様の正確な値）】\n　1回目：5分後\n　2回目：30分後\n　3回目：2時間後\n　4回目（最終）：24時間後\n　タイムアウト：10秒\n\n※PPT旧版の「最大3回・指数バックオフ」は誤り → 上記に修正"
         }
       ]
     },
     {
       "type": "content",
       "slide_title": "SHIRAKUへ確認したいこと ― 技術・仕様編",
-      "key_message": "API仕様・OAuth・スクリーンショット技術仕様・話者マッピングの4点を先に確定することが開発着手の前提",
+      "key_message": "アーキテクチャ方針・受信API仕様・スクリーンショット・話者マッピングの4点が開発着手の前提確認事項",
       "body_items": [
         {
-          "heading": "確認① Archi-Record受信API仕様",
-          "body": "• REST API（POST）かWebhookか？\n• エンドポイントURL・認証方式は？\n   （Bearer Token / HMAC署名 / APIキー）\n• レスポンスコード定義（200/400/409等）\n• OpenAPI仕様書・Postmanコレクション\n  があれば共有をお願いしたい"
+          "heading": "確認① 連携アーキテクチャの方針",
+          "body": "【pull型】Archi-RecordがNotta APIを呼び出してデータ取得\n　→ API仕様に整合。Archi-Record側に実装コスト\n\n【push型】NottaがArchi-RecordのエンドポイントにPOST\n　→ API仕様に定義なし（追加実装が必要）\n\n→ どちらのアーキテクチャで進めるか確認したい\n　※pull型の場合：ArchiRecord側でNotta APIキーを保持し\n　  GET /v1/notes/{id}/transcript を呼び出す実装が必要\n\n関連：メタデータ（archi_record_project_id）による\nノート↔プロジェクト紐づけ方式に合意いただけるか？"
         },
         {
-          "heading": "確認② OAuth認証方式の詳細",
-          "body": "• Notta向けにOAuth 2.0クライアントID\n  を発行できるか？\n• 既存Slack連携のOAuthフロー・\n  シーケンス図を共有いただけるか？\n• Google IDトークン転送方式は\n  採用可能か？\n→ 認証設計の最重要確認事項"
+          "heading": "確認② Archi-Record受信API仕様（push型の場合）",
+          "body": "• REST API（POST）かWebhookか？\n• エンドポイントURL・認証方式は？\n   （Bearer Token / HMAC署名 / APIキー）\n• レスポンスコード定義（200/400/409等）\n• OpenAPI仕様書・Postmanコレクション\n  があれば共有をお願いしたい\n\n※pull型を採用する場合は確認不要"
         },
         {
-          "heading": "確認③ スクリーンショット技術仕様",
-          "body": "• Attach機能の対応フォーマット？\n  （JPEG / PNG / WebP）\n• 1ファイルあたりサイズ上限は？\n• 最終的に何枚送信すればよい？\n  （現資料：基本1枚 / 候補3-5枚）\n• Notta側で枚数選択UIを提供するか\n  Archi-Record側で自動選択するか？"
+          "heading": "確認③ スクリーンショット機能の要件",
+          "body": "現状：Notta API v1にスクリーンショット機能は存在しない\n\n→ SHIRAKUへの確認事項：\n• スクリーンショットは必須要件か？（PoC時点でも必要か）\n• 必須の場合、どちら側で実装するか検討したい\n   A) Notta側に追加実装を要望（v2以降の検討項目）\n   B) Archi-Record側でZoom録画から独自にフレーム抽出\n   C) スクリーンショットなしでPoC開始し、後工程で追加\n\n• 仮に提供できる場合の技術仕様：\n   対応フォーマット（JPEG/PNG/WebP）\n   1ファイルあたりサイズ上限\n   1会議あたりの想定枚数"
         },
         {
           "heading": "確認④ 話者名マッピング仕様",
-          "body": "Pattern A（Notta Bot）の場合：\n　Zoom表示名 → Archi-Recordメンバー名\n　に自動マッピングするための\n　メンバーリスト取得APIはあるか？\n\nPattern B（MP4/MP3）の場合：\n　「話者1・話者2」→ 名前編集後に\n　Archi-Recordへ反映するフローは？"
+          "body": "Pattern A（Notta Bot）の場合：\n　Zoom表示名 → Archi-Recordメンバー名\n　に自動マッピングするための\n　メンバーリスト取得APIはあるか？\n\nPattern B（MP4/MP3）の場合：\n　「話者1・話者2」→ 名前編集後に\n　Archi-Recordへ反映するフローは？\n\n補足：Pattern A・Bどちらも v1後半〜v2予定。\n→ PoCスコープと合わせて優先度を確認したい"
         }
       ]
     },
     {
       "type": "content",
       "slide_title": "SHIRAKUへ確認したいこと ― 業務・スケジュール編",
-      "key_message": "PoCスコープと成功KPIの早期合意で、両社の開発リソースを適切に配置する",
+      "key_message": "v1制約を踏まえた現実的なPoCスコープの合意が最優先。Bot/UploadAPIなしでの検証設計が必要",
       "body_items": [
         {
-          "heading": "確認⑤ PoCスコープ",
-          "body": "• 対象会議の種類・件数・参加者数上限\n• Pattern A / B どちらを先行検証？\n• テスト対象のチェックリスト\n  テンプレート種類は？\n• 1会議あたりのQ&Aペア平均件数は？\n• PoC開始に向けたサンドボックス環境は\n  提供可能か？"
+          "heading": "確認⑤ PoCスコープ（v1制約を踏まえて）",
+          "body": "v1の現実的な構成：\n　Nottaアプリで録音/アップロード（手動）\n　→ API経由でtranscript取得 → 自動入力\n\n確認したい点：\n• 上記構成でもPoCとして成立するか？\n• 対象会議の種類・件数・参加者数上限\n• テスト対象のチェックリストテンプレート種類\n• 1会議あたりのQ&Aペア平均件数の想定\n• PoC開始に向けたサンドボックス環境の提供は可能か？\n• Bot派遣やFile Upload APIが揃う前に\n  PoCを開始する場合のリスク許容度は？"
         },
         {
           "heading": "確認⑥ 自動入力の精度目標・承認フロー",
-          "body": "• Q&A抽出・チェックリスト入力の\n  精度目標は？（例：適合率80%以上）\n• 誤入力時の修正フローは？\n   A) ユーザーが手動修正\n   B) Nottaへ再送信を要求\n• 人間承認ステップは必要か？\n   → 確認後自動反映 / 即時反映？"
+          "body": "• Q&A抽出・チェックリスト入力の\n  精度目標は？（例：適合率80%以上）\n• 誤入力時の修正フローは？\n   A) ユーザーが手動修正\n   B) Nottaへ再送信を要求\n• 人間承認ステップは必要か？\n   → 確認後自動反映 / 即時反映？\n• Q&A構造化をNottaが提供しない場合、\n  Archi-Record側のLLM処理コスト・精度は\n  受け入れ可能か？"
         },
         {
           "heading": "確認⑦ マイルストーン・スケジュール",
-          "body": "【M1】API仕様・JSONスキーマ合意\n【M2】OAuth認証フロー実装完了\n【M3】Q&A構造化 + スクショ取得完了\n【M4】結合テスト・E2E検証\n【M5】PoC本番開始・評価\n\n→ 各マイルストーンの目標日を確定したい"
+          "body": "【M1】アーキテクチャ方針・JSONスキーマ合意\n　　　（Q&A構造化 / スクリーンショットの担当整理含む）\n【M2】認証・メタデータ紐づけ実装完了\n　　　（APIキー発行 + archi_record_project_id連携）\n【M3】Webhook受信 + transcript pull取得 完了\n【M4】Q&A変換 + チェックリスト自動入力 完了\n【M5】結合テスト・E2E検証\n【M6】PoC本番開始・評価\n\n→ 各マイルストーンの目標日を確定したい\n　※BotAPI/FileUploadAPIの提供時期が確定次第\n　 M1〜M3を見直す可能性あり"
         },
         {
           "heading": "確認⑧ 体制・契約・窓口",
-          "body": "• 技術担当 / ビジネス担当の連絡先\n• 仕様変更の受付フロー\n  （Notion / GitHub / メール等）\n• データ利用・NDA・DPA締結の要否\n  ※映像・発言者情報の個人情報扱い\n• 定期MTGの頻度・初回キックオフ日程"
+          "body": "• 技術担当 / ビジネス担当の連絡先\n• 仕様変更の受付フロー\n  （Notion / GitHub / メール等）\n• データ利用・NDA・DPA締結の要否\n  ※transcriptデータ（発言録）・参加者情報は\n  　個人情報に該当する可能性があり確認が必要\n• 定期MTGの頻度・初回キックオフ日程"
         }
       ]
     }
