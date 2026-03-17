@@ -1,0 +1,135 @@
+{
+  "title": "Notta × SHIRAKU API連携 ディスカッションペーパー",
+  "subtitle": "Archi-Record連携に向けた技術要件確認 / 2026.03",
+  "slides": [
+    {
+      "type": "title",
+      "title": "Notta × SHIRAKU API連携\nディスカッションペーパー",
+      "content": "Archi-Record連携に向けた技術要件確認\n2026年3月"
+    },
+    {
+      "type": "content",
+      "slide_title": "SHIRAKUが実現したい連携の全体像",
+      "key_message": "議事録動画 → Notta（AI文字起こし・Q&A構造化）→ JSON送信 → Archi-RecordチェックリストへゼロタッチでQ&Aが自動入力される世界",
+      "body_items": [
+        {
+          "heading": "①連携フロー4ステップ",
+          "body": "【Step1】動画の撮影・アップロード → 【Step2】Nottaで議事録作成（音声解析・文字起こし・話者識別・質疑応答の構造化・タイムスタンプ付与）→ 【Step3】Archi-Recordへ自動送信（JSON形式）→ 【Step4】チェックリストに自動入力。現在の手動転記ゼロを実現する。"
+        },
+        {
+          "heading": "②入力パターン A：Notta Bot使用",
+          "body": "Zoom Meetingにnotta botを招待。Zoom参加者名 → 話者名の自動マッピングにより高精度な話者識別を実現。SHIRAKUが最も期待するシナリオ。Notta BotがZoom SDKで参加し、リアルタイム文字起こし・Q&A構造化を行う。"
+        },
+        {
+          "heading": "③入力パターン B：MP4/MP3アップロード",
+          "body": "録画済みの動画ファイルをNottaにアップロード。「話者1・話者2…」としての基本的な話者識別。ZoomのBot参加が難しい会議（対面・外部システム等）の補完手段として位置づけ。話者名の後付け編集が必要になるケースあり。"
+        },
+        {
+          "heading": "④Archi-Recordが欲しいJSONデータ",
+          "body": "1レコードの構成：【質問内容】【質問者】【回答】【回答者】【スクリーンショット（候補3-5枚）】＋【タイムスタンプ】。Archi-Record側のCheck ListにはAttach機能（画像添付）・質問者・内容・回答者フィールドが存在し、JSONの各フィールドと1対1で対応。"
+        },
+        {
+          "heading": "⑤NottaアプリのUI連携イメージ",
+          "body": "「連携とアプリ」→「すべての連携サービス」にArchi-Recordを追加。Slack・Salesforce・HubSpot等と同等のUIで「連携する」ボタンから設定。オートメーション設定で「アクション：Archi-Recordに同期」「オプション：Archi-Recordのプロジェクトを選択」というUX設計を想定。"
+        },
+        {
+          "heading": "⑥スクリーンショットのコンセプト",
+          "body": "質問者・回答者が発話した区間の映像キャプチャ。基本1枚で十分（多くは不要）。取得案：質問者のタイムスタンプ起点から10秒に1回程度のざっくりキャプチャ。動画ファイル自体はNotta側に保存不要（ストレージ節約）。プライバシー配慮の法的確認が要件。"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "slide_title": "NottaのAPI開発で考慮すべき事項",
+      "key_message": "「連携サービス追加UI」「Q&A構造化エンジン」「スクリーンショット取得」「OAuthフロー設計」の4領域がNotta側の主要開発テーマ",
+      "body_items": [
+        {
+          "heading": "①Notta連携サービスへのArchi-Record追加",
+          "body": "既存の「連携とアプリ」UIにArchi-Recordを追加するためのサービスカタログ登録・アイコン・説明文の整備が必要。Slack・Salesforce等と同様のパートナー連携フレームワークにArchi-Recordを組み込む。オートメーションエンジン側に「Archi-Recordへ送信」アクションを新規追加し、プロジェクトを選択できるUIコンポーネントを実装。"
+        },
+        {
+          "heading": "②OAuthフロー設計（Google SSO考慮）",
+          "body": "Archi-RecordはGoogle認証を採用しているため、Slack型OAuthとの差分設計が必要。候補アプローチ：（A）Notta側がArchi-RecordのOAuth 2.0クライアントになりAuthorization Code Flowで認証、（B）Google IDトークンをArchi-Recordのバックエンドに転送してセッション連携。Archi-Record側がNotta向けにOAuth Clientを発行できるかを確認必須。"
+        },
+        {
+          "heading": "③Q&A構造化ロジックの設計",
+          "body": "発話ストリームから「質問」「回答」ペアを自動抽出するAIパイプラインを設計。アプローチ：（A）LLMによるターン意図分類（高精度・コスト高）、（B）疑問符・疑問助詞・スピーカー交替のルールベース（高速・低コスト）。建築業界特有の専門用語（工法名・図面番号等）への対応プロンプト設計も検討。ZoomのDisplay Name → Archi-Record内話者名のマッピング機構を実装。"
+        },
+        {
+          "heading": "④スクリーンショット取得の技術課題",
+          "body": "映像ソース（Zoom録画API / MP4ファイル）から指定タイムスタンプのフレームを抽出する機能が必要。実装案：Zoom Cloud Recordingのダウンロード → ffmpegによるフレーム抽出 → Notta CDNにアップロードしURLを生成。動画ファイルをNottaに永続保存せず処理後に削除することでストレージコストを抑制。スクリーンショットに第三者の映像が映り込む場合の法的・プライバシー対応も要検討。"
+        },
+        {
+          "heading": "⑤JSONスキーマ設計とWebhook配信",
+          "body": "SHIRAKUが期待するフィールド（質問内容・質問者・回答・回答者・スクリーンショット）＋タイムスタンプ・会議ID・話者IDをスキーマ化。Archi-Recordへの送信タイミング：議事録確定時のWebhook POST。冪等性（idempotency-key）・リトライ（最大3回・指数バックオフ）・送信ログ保持を実装。スクリーンショットの送信形式：URL参照 or Base64のどちらか確認要。"
+        },
+        {
+          "heading": "⑥プライバシー・セキュリティ設計",
+          "body": "会議映像・発言者情報は個人情報保護法（APPI）対象の可能性あり。動画は処理後即時削除（保存不要方針に合致）。スクリーンショットに含まれる参加者映像の取り扱いポリシーをSHIRAKU・Notta双方で合意。通信はTLS 1.3、保存データはAES-256暗号化。DPA（データ処理契約）の締結要否も検討。"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "slide_title": "SHIRAKUへ確認すべき事項 ― 技術・仕様",
+      "key_message": "Archi-Record側API仕様・OAuthクライアント発行可否・スクリーンショット技術仕様の3点がAPI設計着手前の最重要確認事項",
+      "body_items": [
+        {
+          "heading": "【確認①】Archi-Record受信API仕様",
+          "body": "NottaからのJSON受信はREST API（POST）かWebhookか。エンドポイントURL・HTTPメソッド・認証方式（Bearer Token / HMAC署名 / APIキー）・レスポンスコード定義（200/400/409/429/500等）を共有いただきたい。既存のOpenAPI仕様書・Postmanコレクションがあれば提供をお願いしたい。"
+        },
+        {
+          "heading": "【確認②】OAuth認証方式の詳細",
+          "body": "Archi-RecordがGoogleログインを採用していることを踏まえ、Notta-Archi-Record間の認証をどう設計するか合意が必要。①Archi-RecordがNotta向けにOAuth 2.0クライアントIDを発行できるか、②既存のSlack連携でのOAuthフロー実装例・シーケンス図を共有いただけるか、③Google IDトークンの転送方式を採用する可能性があるか確認したい。"
+        },
+        {
+          "heading": "【確認③】JSONフィールド詳細と命名規則",
+          "body": "フィールド名の命名規則（camelCase/snake_case）・型定義・必須/任意・null許容ルール・文字数上限を確認。特にスクリーンショットはURL（CDN参照）で受け取るかBase64エンコードで受け取るかの選択、複数枚送信時の配列形式の仕様を明確にしたい。"
+        },
+        {
+          "heading": "【確認④】スクリーンショットの技術仕様",
+          "body": "Archi-RecordのAttach機能で許容される画像フォーマット（JPEG/PNG/WebP）・ファイルサイズ上限（例：1MB/枚）・解像度を確認。現資料では「基本1枚・3-5枚候補」の記載があるが、最終的に何枚をNottaから送信すべきか決定が必要。スクリーンショット選択UIをNotta側で提供するかArchi-Record側で自動選択するかも検討。"
+        },
+        {
+          "heading": "【確認⑤】話者名マッピング仕様",
+          "body": "Pattern A（Notta Bot for Zoom）ではZoom Display Name → Archi-Recordのメンバー名への自動マッピングを想定しているが、マッピングの方法を確認。①Archi-Recordのメンバーリスト取得APIがあるか、②ユーザーが手動でマッピング設定するUIを用意するか、③Pattern B（MP4/MP3）での話者1・話者2の名前後付け編集フローをArchi-Record側でどう扱うか。"
+        },
+        {
+          "heading": "【確認⑥】Archi-Recordシステム構成とSLA",
+          "body": "クラウドSaaSかオンプレミスかを確認。API rate limit（リクエスト数/分）・同時接続数上限・レスポンスタイムSLA（例：P95で3秒以内）・メンテナンス時間帯の通知方法。テスト・E2E検証に向けたサンドボックス環境の提供可否。本番移行後の月間会議件数・データ量の見込みも共有いただきたい。"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "slide_title": "SHIRAKUへ確認すべき事項 ― 業務・スケジュール",
+      "key_message": "PoCスコープと成功KPIの早期合意により両社の開発リソースを適切に配置し、品質目標と検証期間を確定する",
+      "body_items": [
+        {
+          "heading": "【確認⑦】PoCスコープと対象シナリオ",
+          "body": "PoC対象とする会議の種類（現場確認会議・設計打ち合わせ等）・件数・参加者数上限。Pattern A（Notta Bot）とPattern B（MP4/MP3アップロード）のどちらを先行検証するか。Archi-RecordのCheck Listテンプレートの種類（建築確認/工程管理等）とQ&Aペアの想定件数（1会議あたり平均何件）を共有いただきたい。"
+        },
+        {
+          "heading": "【確認⑧】自動入力の期待精度と承認フロー",
+          "body": "Q&A抽出・チェックリスト自動入力の精度目標（例：適合率80%以上）を確認。誤入力・誤認識時の修正フロー（ユーザーが手動修正 or Nottaへ再送信要求）と、人間承認ステップの要否（確認後自動反映 / 即時反映の2モード）を取り決めたい。建築専門用語・プロジェクト固有名詞の精度向上策も議論したい。"
+        },
+        {
+          "heading": "【確認⑨】スケジュール・マイルストーン",
+          "body": "【M1】API仕様・JSONスキーマ合意、【M2】OAuth認証フロー実装・単体テスト完了、【M3】Q&A構造化+スクリーンショット取得実装完了、【M4】Archi-Record側アダプター実装・結合テスト、【M5】E2Eテスト・PoC本番開始・評価。各マイルストーンの目標日程をSHIRAKUと合意したい。"
+        },
+        {
+          "heading": "【確認⑩】Slack連携の実装詳細共有",
+          "body": "NottaにはSlack連携が既に実装されているため、Archi-Record連携のOAuthフロー設計参考として実装例を共有。SHIRAKU側でも既存Slack連携があればOAuth設計・シーケンス図・API設計パターンをNotta側に提供いただけると開発効率が上がる。共有形式（Notion / GitHub / OpenAPI仕様書等）を確認。"
+        },
+        {
+          "heading": "【確認⑪】データ利用・プライバシー・契約",
+          "body": "会議映像（スクリーンショット取得後は削除想定）・議事録テキスト・発言者情報の二次利用範囲（AI学習利用の可否等）。NDA・DPA（データ処理契約）の締結要否。建築現場の映像に含まれる未公開図面・設計情報の機密扱い。個人情報保護法（APPI）準拠の対応方針をSHIRAKU側で確認済みかどうか。"
+        },
+        {
+          "heading": "【確認⑫】窓口・体制・意思決定フロー",
+          "body": "技術担当（APIスキーマ・インフラ担当）とビジネス担当（要件・契約担当）の連絡先確認。仕様変更・追加要望の受付フロー（GitHubイシュー / Notion / メール等）・意思決定者の特定。定期進捗MTGの頻度・形式（週次/隔週/Zoom）・初回キックオフの日程候補を決定したい。"
+        }
+      ]
+    }
+  ]
+}
